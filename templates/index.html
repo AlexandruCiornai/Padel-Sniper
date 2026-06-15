@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Padel Sniper 🎾</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --card: #22263a;
+    --accent: #4f9cf9;
+    --accent2: #38d9a9;
+    --danger: #ff6b6b;
+    --warn: #ffd43b;
+    --text: #e8eaf0;
+    --muted: #7a7f99;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+
+  .app {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 16px 14px;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    padding-top: 8px;
+  }
+  .header-icon { font-size: 28px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header p { font-size: 12px; color: var(--muted); }
+
+  /* ─── CARD ─── */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* ─── INPUTS ─── */
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .field input {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 15px;
+    padding: 11px 13px;
+    outline: none;
+    transition: border-color .2s;
+    -webkit-appearance: none;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(.5);
+  }
+
+  /* ─── HOUR BUTTONS ─── */
+  .hour-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .hour-btn {
+    background: var(--surface);
+    border: 1.5px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 4px;
+    cursor: pointer;
+    transition: all .15s;
+    -webkit-tap-highlight-color: transparent;
+    text-align: center;
+  }
+  .hour-btn.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(79,156,249,.35);
+  }
+  .hour-btn:active { transform: scale(.94); }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .02em;
+    transition: all .15s;
+    -webkit-tap-highlight-color: transparent;
+    margin-top: 10px;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #6b7fff);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(79,156,249,.3);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1.5px solid rgba(255,255,255,0.1);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1.5px solid var(--danger);
+    padding: 8px 12px;
+    font-size: 12px;
+    width: auto;
+    margin-top: 0;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ─── STATUS TOAST ─── */
+  #toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: var(--card);
+    border-radius: 24px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+    z-index: 999;
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.success { border-color: var(--accent2); color: var(--accent2); }
+  #toast.error { border-color: var(--danger); color: var(--danger); }
+  #toast.info { border-color: var(--accent); color: var(--accent); }
+
+  /* ─── BOOKING LIST ─── */
+  .booking-item {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 13px 14px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(255,255,255,.05);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .booking-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .booking-date {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .booking-hour {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+  .booking-meta {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .booking-msg {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+  }
+  .badge.pending  { background: rgba(255,212,59,.15); color: var(--warn); }
+  .badge.running  { background: rgba(79,156,249,.15); color: var(--accent); }
+  .badge.success  { background: rgba(56,217,169,.15); color: var(--accent2); }
+  .badge.failed   { background: rgba(255,107,107,.15); color: var(--danger); }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 24px 0;
+  }
+
+  /* ─── FIRE TIME HINT ─── */
+  .fire-hint {
+    background: rgba(79,156,249,.08);
+    border: 1px solid rgba(79,156,249,.2);
+    border-radius: var(--radius-sm);
+    padding: 10px 13px;
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 10px;
+    display: none;
+  }
+  .fire-hint.visible { display: block; }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,.06);
+    margin: 4px 0 14px;
+  }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-icon">🎾</div>
+    <div>
+      <h1>Padel Sniper</h1>
+      <p>Rezervare automată Florești – Calendis.ro</p>
+    </div>
+  </div>
+
+  <!-- CONT CALENDIS -->
+  <div class="card">
+    <div class="card-title">Cont Calendis</div>
+    <div class="field">
+      <label>Email cont Calendis</label>
+      <input type="email" id="cal-email" placeholder="email@exemplu.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Parolă</label>
+      <input type="password" id="cal-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-secondary" id="btn-verify" onclick="verifyLogin()">
+      Verifică cont
+    </button>
+  </div>
+
+  <!-- REZERVARE -->
+  <div class="card">
+    <div class="card-title">Rezervare Nouă</div>
+
+    <div class="field">
+      <label>Data dorită (slotul se deschide cu 14 zile înainte)</label>
+      <input type="date" id="target-date" onchange="updateFireHint()">
+    </div>
+
+    <div class="field">
+      <label>Ora dorită</label>
+      <div class="hour-grid" id="hour-grid">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+
+    <div class="fire-hint" id="fire-hint"></div>
+
+    <div class="divider" style="margin-top:14px;"></div>
+
+    <div class="field">
+      <label>Email pentru notificări (succes/eșec)</label>
+      <input type="email" id="notify-email" placeholder="email@exemplu.com" autocomplete="email">
+    </div>
+
+    <button class="btn btn-primary" id="btn-schedule" onclick="scheduleBooking()">
+      Programează Sniping
+    </button>
+  </div>
+
+  <!-- REZERVĂRI PROGRAMATE -->
+  <div class="card">
+    <div class="card-title">Rezervări Programate</div>
+    <div id="booking-list">
+      <div class="empty-state">Nicio rezervare programată</div>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:4px;font-size:13px;" onclick="loadBookings()">
+      Reîncarcă
+    </button>
+  </div>
+
+</div>
+
+<script>
+const socket = io();
+let selectedHour = null;
+
+// ─── HOURS ───────────────────────────────────────────────────────────────────
+const HOURS = ["07:00","08:00","09:00","10:00","11:00","12:00","13:00",
+               "14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
+
+function buildHourGrid() {
+  const grid = document.getElementById('hour-grid');
+  grid.innerHTML = '';
+  HOURS.forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'hour-btn';
+    btn.textContent = h;
+    btn.onclick = () => selectHour(h, btn);
+    grid.appendChild(btn);
+  });
+}
+
+function selectHour(h, btn) {
+  selectedHour = h;
+  document.querySelectorAll('.hour-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  updateFireHint();
+}
+
+// ─── FIRE HINT ────────────────────────────────────────────────────────────────
+function updateFireHint() {
+  const dateVal = document.getElementById('target-date').value;
+  const hint = document.getElementById('fire-hint');
+  if (!dateVal || !selectedHour) { hint.classList.remove('visible'); return; }
+
+  const [y,mo,d] = dateVal.split('-').map(Number);
+  const [h,m] = selectedHour.split(':').map(Number);
+  const target = new Date(y, mo-1, d, h, m, 0);
+  const fireDate = new Date(target.getTime() - 14 * 24 * 3600 * 1000);
+  const jobDate  = new Date(fireDate.getTime() - 2 * 60 * 1000);
+
+  const fmt = dt => dt.toLocaleDateString('ro-RO', {day:'2-digit',month:'2-digit',year:'numeric'})
+                  + ' ' + dt.toLocaleTimeString('ro-RO', {hour:'2-digit',minute:'2-digit'});
+
+  hint.textContent = `Slotul se deschide: ${fmt(fireDate)} | Botul pornește: ${fmt(jobDate)}`;
+  hint.classList.add('visible');
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3500);
+}
+
+// ─── VERIFY LOGIN ─────────────────────────────────────────────────────────────
+async function verifyLogin() {
+  const email = document.getElementById('cal-email').value.trim();
+  const pass  = document.getElementById('cal-pass').value;
+  if (!email || !pass) { toast('Completează email și parolă', 'error'); return; }
+
+  const btn = document.getElementById('btn-verify');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Verifică...';
+
+  try {
+    const r = await fetch('/api/verify-login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, password: pass})
+    });
+    const data = await r.json();
+    toast(data.message, data.ok ? 'success' : 'error');
+  } catch(e) {
+    toast('Eroare conexiune server', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Verifică cont';
+  }
+}
+
+// ─── SCHEDULE ─────────────────────────────────────────────────────────────────
+async function scheduleBooking() {
+  const email      = document.getElementById('cal-email').value.trim();
+  const pass       = document.getElementById('cal-pass').value;
+  const dateVal    = document.getElementById('target-date').value;
+  const notifyEmail = document.getElementById('notify-email').value.trim() || email;
+
+  if (!email || !pass)     { toast('Completează datele contului', 'error'); return; }
+  if (!dateVal)            { toast('Selectează data dorită', 'error'); return; }
+  if (!selectedHour)       { toast('Selectează ora dorită', 'error'); return; }
+
+  const btn = document.getElementById('btn-schedule');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Programează...';
+
+  try {
+    const r = await fetch('/api/schedule', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        email, password: pass,
+        target_date: dateVal,
+        target_hour: selectedHour,
+        notify_email: notifyEmail
+      })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      toast(`✅ ${data.message}`, 'success');
+      loadBookings();
+    } else {
+      toast(data.message, 'error');
+    }
+  } catch(e) {
+    toast('Eroare conexiune server', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Programează Sniping';
+  }
+}
+
+// ─── DELETE ───────────────────────────────────────────────────────────────────
+async function deleteBooking(id) {
+  if (!confirm('Ștergi această rezervare programată?')) return;
+  await fetch(`/api/bookings/${id}`, {method:'DELETE'});
+  loadBookings();
+}
+
+// ─── LOAD LIST ────────────────────────────────────────────────────────────────
+const STATUS_LABEL = {
+  pending: 'În așteptare',
+  running: 'În curs',
+  success: 'Reușit ✅',
+  failed:  'Eșuat ❌',
+};
+
+async function loadBookings() {
+  const list = document.getElementById('booking-list');
+  try {
+    const r = await fetch('/api/bookings');
+    const bookings = await r.json();
+
+    if (!bookings.length) {
+      list.innerHTML = '<div class="empty-state">Nicio rezervare programată</div>';
+      return;
+    }
+
+    list.innerHTML = bookings.map(b => {
+      const dateFormatted = b.target_date.split('-').reverse().join('.');
+      const badgeClass = b.status;
+      const isActive = b.status === 'running';
+      const spinner = isActive ? '<span class="spinner"></span>' : '';
+      const canDelete = b.status === 'pending' || b.status === 'failed' || b.status === 'success';
+
+      return `<div class="booking-item" id="booking-${b.id}">
+        <div class="booking-header">
+          <div>
+            <div class="booking-date">${dateFormatted}</div>
+            <div class="booking-meta">${b.email}</div>
+          </div>
+          <div class="booking-hour">${b.target_hour}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="badge ${badgeClass}">${spinner}${STATUS_LABEL[b.status] || b.status}</span>
+          ${canDelete ? `<button class="btn btn-danger" onclick="deleteBooking(${b.id})">Șterge</button>` : ''}
+        </div>
+        ${b.message ? `<div class="booking-msg">${b.message}</div>` : ''}
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    list.innerHTML = '<div class="empty-state">Eroare la încărcarea listei</div>';
+  }
+}
+
+// ─── SOCKET UPDATES ───────────────────────────────────────────────────────────
+socket.on('booking_update', function(data) {
+  loadBookings();
+  const statusMap = { success: 'success', failed: 'error', running: 'info' };
+  toast(data.message, statusMap[data.status] || 'info');
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+buildHourGrid();
+loadBookings();
+
+// Set min date to today + 1
+const tomorrow = new Date();
+tomorrow.setDate(tomorrow.getDate() + 1);
+document.getElementById('target-date').min = tomorrow.toISOString().split('T')[0];
+</script>
+</body>
+</html>
