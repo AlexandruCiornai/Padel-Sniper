@@ -158,7 +158,8 @@ async function submitPin() {
     if (r.ok) {
       window.location.reload();
     } else {
-      showError();
+      const data = await r.json();
+      showError(data.message || 'PIN greșit');
     }
   } catch(e) {
     showError('Eroare conexiune');

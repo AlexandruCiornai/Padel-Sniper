@@ -30,6 +30,9 @@ COURT_URL = "https://www.calendis.ro/floresti_cj/parcul-sportiv-floresti/teren-d
 TZ = ZoneInfo("Europe/Bucharest")
 APP_PIN = os.environ.get("APP_PIN", "1234")
 
+# ip -> {"count": int, "locked_until": datetime | None}
+_login_attempts: dict = {}
+
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_PASS = os.environ.get("GMAIL_PASS", "")
 
@@ -328,12 +331,31 @@ def index():
 
 @app.route("/api/login", methods=["POST"])
 def app_login():
+    ip = request.remote_addr
+    now = datetime.now(TZ)
+    state = _login_attempts.get(ip, {"count": 0, "locked_until": None})
+
+    if state["locked_until"] and now < state["locked_until"]:
+        remaining = int((state["locked_until"] - now).total_seconds() / 60) + 1
+        return jsonify({"ok": False, "message": f"Blocat. Încearcă după {remaining} min."}), 429
+
     data = request.json or {}
     if data.get("pin") == APP_PIN:
+        _login_attempts.pop(ip, None)
         session["authenticated"] = True
         session.permanent = True
         return jsonify({"ok": True})
-    return jsonify({"ok": False, "message": "PIN greșit"}), 401
+
+    state["count"] = state.get("count", 0) + 1
+    if state["count"] >= 5:
+        state["locked_until"] = now + timedelta(minutes=15)
+        state["count"] = 0
+        _login_attempts[ip] = state
+        return jsonify({"ok": False, "message": "5 încercări greșite. Blocat 15 minute."}), 429
+
+    _login_attempts[ip] = state
+    left = 5 - state["count"]
+    return jsonify({"ok": False, "message": f"PIN greșit. {left} încercări rămase."}), 401
 
 
 @app.route("/api/logout", methods=["POST"])
