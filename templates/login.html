@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Padel Sniper</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #22263a;
+    --accent: #4f9cf9;
+    --danger: #ff6b6b;
+    --text: #e8eaf0;
+    --muted: #7a7f99;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+  }
+  .icon { font-size: 52px; margin-bottom: 12px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  p { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
+
+  .pin-display {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .pin-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--muted);
+    transition: all .15s;
+  }
+  .pin-dot.filled {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(79,156,249,.4);
+  }
+  .pin-dot.error {
+    background: var(--danger);
+    border-color: var(--danger);
+    animation: shake .3s ease;
+  }
+
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .key {
+    background: var(--card);
+    border: 1.5px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 600;
+    padding: 18px 0;
+    cursor: pointer;
+    transition: all .1s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .key:active { transform: scale(.9); background: rgba(79,156,249,.15); }
+  .key.empty { background: transparent; border-color: transparent; cursor: default; }
+  .key.del { font-size: 18px; }
+
+  .error-msg {
+    color: var(--danger);
+    font-size: 13px;
+    height: 18px;
+    transition: opacity .2s;
+  }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="icon">🎾</div>
+  <h1>Padel Sniper</h1>
+  <p>Introdu PIN-ul pentru acces</p>
+
+  <div class="pin-display" id="pin-display">
+    <div class="pin-dot" id="dot-0"></div>
+    <div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div>
+    <div class="pin-dot" id="dot-3"></div>
+  </div>
+
+  <div class="keypad">
+    <button class="key" onclick="pressKey('1')">1</button>
+    <button class="key" onclick="pressKey('2')">2</button>
+    <button class="key" onclick="pressKey('3')">3</button>
+    <button class="key" onclick="pressKey('4')">4</button>
+    <button class="key" onclick="pressKey('5')">5</button>
+    <button class="key" onclick="pressKey('6')">6</button>
+    <button class="key" onclick="pressKey('7')">7</button>
+    <button class="key" onclick="pressKey('8')">8</button>
+    <button class="key" onclick="pressKey('9')">9</button>
+    <button class="key empty"></button>
+    <button class="key" onclick="pressKey('0')">0</button>
+    <button class="key del" onclick="deleteLast()">⌫</button>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+</div>
+
+<script>
+let pin = '';
+const MAX = 4;
+
+function pressKey(digit) {
+  if (pin.length >= MAX) return;
+  pin += digit;
+  updateDots();
+  if (pin.length === MAX) submitPin();
+}
+
+function deleteLast() {
+  pin = pin.slice(0, -1);
+  updateDots();
+  document.getElementById('error-msg').textContent = '';
+}
+
+function updateDots() {
+  for (let i = 0; i < MAX; i++) {
+    const dot = document.getElementById(`dot-${i}`);
+    dot.className = 'pin-dot' + (i < pin.length ? ' filled' : '');
+  }
+}
+
+async function submitPin() {
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin})
+    });
+    if (r.ok) {
+      window.location.reload();
+    } else {
+      showError();
+    }
+  } catch(e) {
+    showError('Eroare conexiune');
+  }
+}
+
+function showError(msg = 'PIN greșit') {
+  pin = '';
+  for (let i = 0; i < MAX; i++) {
+    const dot = document.getElementById(`dot-${i}`);
+    dot.className = 'pin-dot error';
+  }
+  document.getElementById('error-msg').textContent = msg;
+  setTimeout(() => updateDots(), 600);
+}
+</script>
+</body>
+</html>

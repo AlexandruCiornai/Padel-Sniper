@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 from threading import Thread
 from zoneinfo import ZoneInfo
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -28,6 +28,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 COURT_URL = "https://www.calendis.ro/floresti_cj/parcul-sportiv-floresti/teren-de-paddle-1/s"
 TZ = ZoneInfo("Europe/Bucharest")
+APP_PIN = os.environ.get("APP_PIN", "1234")
 
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_PASS = os.environ.get("GMAIL_PASS", "")
@@ -314,18 +315,42 @@ async def _sniper_async(booking_id: int):
 
 # ─── FLASK ROUTES ─────────────────────────────────────────────────────────────
 
+def is_authenticated():
+    return session.get("authenticated") is True
+
+
 @app.route("/")
 def index():
+    if not is_authenticated():
+        return render_template("login.html")
     return render_template("index.html")
+
+
+@app.route("/api/login", methods=["POST"])
+def app_login():
+    data = request.json or {}
+    if data.get("pin") == APP_PIN:
+        session["authenticated"] = True
+        session.permanent = True
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "message": "PIN greșit"}), 401
+
+
+@app.route("/api/logout", methods=["POST"])
+def app_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/bookings", methods=["GET"])
 def list_bookings():
+    if not is_authenticated(): return jsonify({"error": "unauthorized"}), 401
     return jsonify(db_get_all())
 
 
 @app.route("/api/bookings/<int:booking_id>", methods=["DELETE"])
 def delete_booking(booking_id):
+    if not is_authenticated(): return jsonify({"error": "unauthorized"}), 401
     try:
         scheduler.remove_job(f"sniper_{booking_id}")
     except Exception:
@@ -336,6 +361,7 @@ def delete_booking(booking_id):
 
 @app.route("/api/verify-login", methods=["POST"])
 def verify_login():
+    if not is_authenticated(): return jsonify({"error": "unauthorized"}), 401
     data = request.json or {}
     email = data.get("email", "").strip()
     password = data.get("password", "")
@@ -365,6 +391,7 @@ def verify_login():
 
 @app.route("/api/schedule", methods=["POST"])
 def schedule_booking():
+    if not is_authenticated(): return jsonify({"error": "unauthorized"}), 401
     data = request.json or {}
     email = data.get("email", "").strip()
     password = data.get("password", "")
