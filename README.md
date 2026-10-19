@@ -4,7 +4,12 @@ The padel courts in my town (Parcul Sportiv Florești, booked through Calendis) 
 
 You pick a date and time on your phone. The bot logs in two minutes early, waits on the calendar page, and clicks the slot at exactly `hh:mm:00`. Then it emails you whether it worked.
 
-<!-- TODO: add a screenshot or GIF of the phone UI, e.g. docs/screenshot.png -->
+<p align="center">
+  <img src="docs/booking.png" width="300" alt="Booking screen: Calendis account, target date and hour, and the list of scheduled bookings with their status">
+  &nbsp;&nbsp;
+  <img src="docs/login.png" width="300" alt="PIN screen">
+</p>
+<p align="center"><sub>The phone UI (in Romanian), shown with sample data.</sub></p>
 
 ## How it works
 
@@ -27,7 +32,8 @@ You pick a date and time on your phone. The bot logs in two minutes early, waits
 - **Timing:** the job starts 2 minutes early so that login and page load happen before the slot opens. At the exact second, it only has to wait for the slot element and click it.
 - **Verify before you sleep:** "Check account" does a real login right away. That way, wrong credentials show up today instead of two weeks later at 15:00.
 - **Live feedback:** each step is pushed to the open page over Socket.IO and saved to SQLite, so the status survives a page reload.
-- **Access control:** the app sits behind a PIN with per-IP lockout (5 wrong attempts lock that IP for 15 minutes). The app refuses to start without a PIN and a secret key.
+- **Access control:** the app sits behind a PIN with per-IP lockout (5 wrong attempts lock that IP for 15 minutes). The app refuses to start without a valid PIN and a secret key.
+- **DST-safe timing:** "14 days before" is computed in calendar days on the Bucharest clock, so a slot on 2 November still fires at 19:00 on 19 October, even though the clocks change in between.
 
 ## Stack
 
@@ -45,7 +51,7 @@ python app.py             # http://localhost:5000
 | Variable | What it is |
 |---|---|
 | `SECRET_KEY` | Flask session key. Required. Generate one with `openssl rand -hex 32`. |
-| `APP_PIN` | The PIN for opening the app. Required. |
+| `APP_PIN` | The 4-digit PIN for opening the app. Required. |
 | `GMAIL_USER` / `GMAIL_PASS` | The Gmail account and [app password](https://support.google.com/accounts/answer/185833) used for result emails. If these are empty, no emails are sent. |
 | `PORT` | Defaults to 5000. |
 

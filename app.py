@@ -41,6 +41,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 COURT_URL = "https://www.calendis.ro/floresti_cj/parcul-sportiv-floresti/teren-de-paddle-1/s"
 TZ = ZoneInfo("Europe/Bucharest")
 APP_PIN = require_env("APP_PIN")
+if not (APP_PIN.isdigit() and len(APP_PIN) == 4):
+    # The login screen (templates/login.html) has a 4-digit keypad.
+    log.critical("APP_PIN must be exactly 4 digits")
+    sys.exit(1)
 
 # ip -> {"count": int, "locked_until": datetime | None}
 _login_attempts: dict = {}

@@ -19,7 +19,7 @@ python app.py
    - `GMAIL_USER` = adresa ta Gmail
    - `GMAIL_PASS` = App Password Gmail (nu parola normală!)
    - `SECRET_KEY` = un string random lung (ex: openssl rand -hex 32)
-   - `APP_PIN` = PIN-ul cerut la deschiderea aplicației (obligatoriu; aplicația nu pornește fără el, la fel ca fără `SECRET_KEY`)
+   - `APP_PIN` = PIN-ul de 4 cifre cerut la deschiderea aplicației (obligatoriu; aplicația nu pornește fără el, la fel ca fără `SECRET_KEY`)
 4. Railway detectează automat `railway.json` și rulează build-ul
 5. Settings → Generate Domain → copiezi URL-ul pe telefon
 
