@@ -36,7 +36,9 @@ You pick a date and time on your phone. The bot logs in two minutes early, waits
 - **Live feedback:** each step is pushed to the open page over Socket.IO and saved to SQLite, so the status survives a page reload.
 - **Access control:** the app sits behind a PIN with per-IP lockout (5 wrong attempts lock that IP for 15 minutes). The app refuses to start without a valid PIN and a secret key.
 - **DST-safe timing:** "14 days before" is computed in calendar days on the Bucharest clock, so a slot on 2 November still fires at 19:00 on 19 October, even though the clocks change in between.
-- **Tested core:** the booking rules (slot parsing, opening time, bot start time, PIN rules) live in [`core.py`](core.py), separate from Flask and Playwright. That way they're unit tested on every push across Python 3.11–3.13, including both DST changes.
+- **Passwords encrypted at rest:** the Calendis password is encrypted (Fernet, key derived from `SECRET_KEY`) before it touches SQLite, and wiped as soon as the run ends, whether it succeeded or failed.
+- **Survives restarts:** scheduled jobs live in memory, so on startup the app rebuilds them from SQLite. A booking whose start time is still ahead is rescheduled. One caught inside the 2-minute lead time starts immediately. One whose slot already opened is marked as missed instead of silently vanishing.
+- **Tested core:** the booking rules (slot parsing, opening time, bot start time, restart recovery, PIN rules) live in [`core.py`](core.py), and the encryption lives in [`credentials.py`](credentials.py), separate from Flask and Playwright. That way they're unit tested on every push across Python 3.11–3.13, including both DST changes.
 
 ## Stack
 
@@ -67,11 +69,10 @@ pip install -r requirements-dev.txt
 pytest -v
 ```
 
-The tests are in [`tests/test_core.py`](tests/test_core.py). They pin down the DST case behind a bug I fixed in the phone UI, where the "slot opens at" hint was an hour off whenever the clocks changed inside the 14 days.
+The tests are in [`tests/`](tests). Among other things, they pin down the DST case behind a bug I fixed in the phone UI, where the "slot opens at" hint was an hour off whenever the clocks changed inside the 14 days.
 
 ## Limitations and what I'd do next
 
-- The Calendis password is stored in plain text in SQLite until the booking runs, because the bot has to log in on its own. Next step: encrypt it at rest with a key from the environment, and delete it once the booking finishes.
-- Scheduled jobs live in memory, so a restart loses them. Next step: re-schedule pending bookings from SQLite at startup.
+- The bot needs the Calendis password when it fires, so the password is stored (encrypted) until then. A server compromise that also leaks `SECRET_KEY` would expose pending passwords. A hardware-backed key store would be the next step if this ever served other users.
 - The CSS selectors are tied to the current Calendis markup and will break if the site changes.
 - This was built for my own bookings. Use it within the booking site's terms.

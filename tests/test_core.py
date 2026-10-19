@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core import TZ, bot_starts_at, is_valid_pin, slot_datetime, slot_opens_at
+from core import TZ, bot_starts_at, is_valid_pin, restore_action, slot_datetime, slot_opens_at
 
 
 def bucharest(*args):
@@ -65,3 +65,20 @@ class TestPin:
     @pytest.mark.parametrize("pin", ["", "123", "12345", "12a4", "12 4", "١٢٣٤"])
     def test_rejects_anything_the_keypad_cannot_enter(self, pin):
         assert not is_valid_pin(pin)
+
+
+class TestRestoreAfterRestart:
+    SLOT = bucharest(2026, 6, 29, 15, 0)  # opens 15 Jun 15:00, bot starts 14:58
+
+    def test_future_booking_is_rescheduled(self):
+        assert restore_action(self.SLOT, bucharest(2026, 6, 10, 9, 0)) == "schedule"
+
+    def test_restart_inside_the_lead_time_runs_immediately(self):
+        assert restore_action(self.SLOT, bucharest(2026, 6, 15, 14, 59)) == "run_now"
+
+    def test_restart_exactly_at_bot_start_runs_immediately(self):
+        assert restore_action(self.SLOT, bucharest(2026, 6, 15, 14, 58)) == "run_now"
+
+    def test_restart_after_the_slot_opened_is_missed(self):
+        assert restore_action(self.SLOT, bucharest(2026, 6, 15, 15, 0)) == "missed"
+        assert restore_action(self.SLOT, bucharest(2026, 6, 20, 12, 0)) == "missed"

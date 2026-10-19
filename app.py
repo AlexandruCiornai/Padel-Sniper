@@ -1,23 +1,22 @@
 import os
 import sys
 import hmac
-import json
 import asyncio
 import sqlite3
 import smtplib
 import logging
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
-from threading import Thread
 
 from flask import Flask, request, jsonify, render_template, session
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 
 import core
+import credentials
 
 load_dotenv()
 
@@ -36,6 +35,7 @@ def require_env(name: str) -> str:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = require_env("SECRET_KEY")
+CIPHER = credentials.cipher_from_secret(app.config["SECRET_KEY"])  # Calendis passwords at rest
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
@@ -83,10 +83,28 @@ def db_insert_booking(email, password, target_date, target_hour, notify_email):
     with sqlite3.connect(DB_PATH) as con:
         cur = con.execute(
             "INSERT INTO bookings (email,password,target_date,target_hour,notify_email,status,created_at) VALUES (?,?,?,?,?,?,?)",
-            (email, password, target_date, target_hour, notify_email, "pending", datetime.now(TZ).isoformat()),
+            (email, credentials.encrypt(CIPHER, password), target_date, target_hour, notify_email,
+             "pending", datetime.now(TZ).isoformat()),
         )
         con.commit()
         return cur.lastrowid
+
+
+def db_clear_password(booking_id):
+    """The password is only needed until the bot has run, so don't keep it."""
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute("UPDATE bookings SET password='' WHERE id=?", (booking_id,))
+        con.commit()
+
+
+def db_get_unfinished():
+    """Bookings a restart may have orphaned: still pending, or cut off mid-run."""
+    with sqlite3.connect(DB_PATH) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT id,target_date,target_hour FROM bookings WHERE status IN ('pending','running')"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def db_update_status(booking_id, status, message=""):
@@ -266,7 +284,6 @@ async def _sniper_async(booking_id: int):
 
     row = dict(row)
     email = row["email"]
-    password = row["password"]
     notify = row["notify_email"]
     target_hour = row["target_hour"]  # "15:00"
     target_date = core.slot_datetime(row["target_date"], target_hour)
@@ -275,6 +292,15 @@ async def _sniper_async(booking_id: int):
     def push(msg, status=None):
         log.info("[%d] %s", booking_id, msg)
         socketio.emit("booking_update", {"id": booking_id, "message": msg, "status": status})
+
+    try:
+        password = credentials.decrypt(CIPHER, row["password"])
+    except ValueError as e:
+        err = f"Parola salvată nu poate fi citită ({e})"
+        push(f"❌ {err}", "failed")
+        db_update_status(booking_id, "failed", err)
+        db_clear_password(booking_id)
+        return
 
     push("Se conectează la Calendis...", "running")
     db_update_status(booking_id, "running", "Se conectează...")
@@ -328,6 +354,35 @@ async def _sniper_async(booking_id: int):
                        f"Nu am putut rezerva.\n\nData: {target_date.strftime('%d.%m.%Y')}\nOra: {target_hour}\nMotiv: {err}")
         finally:
             await browser.close()
+            db_clear_password(booking_id)
+
+
+def schedule_sniper(booking_id: int, run_date: datetime):
+    scheduler.add_job(
+        run_sniper,
+        trigger=DateTrigger(run_date=run_date, timezone=TZ),
+        args=[booking_id],
+        id=f"sniper_{booking_id}",
+        replace_existing=True,
+    )
+
+
+def restore_pending_jobs():
+    """Jobs live in memory, so re-create them from SQLite after a restart."""
+    now = datetime.now(TZ)
+    for row in db_get_unfinished():
+        booking_id = row["id"]
+        slot = core.slot_datetime(row["target_date"], row["target_hour"])
+        action = core.restore_action(slot, now)
+        if action == "schedule":
+            schedule_sniper(booking_id, core.bot_starts_at(slot))
+            db_update_status(booking_id, "pending", "Reprogramat după repornire")
+        elif action == "run_now":
+            schedule_sniper(booking_id, now + timedelta(seconds=1))
+        else:
+            db_update_status(booking_id, "failed", "Ratat: serverul era oprit când s-a deschis slotul")
+            db_clear_password(booking_id)
+        log.info("Restored booking #%d: %s", booking_id, action)
 
 
 # ─── FLASK ROUTES ─────────────────────────────────────────────────────────────
@@ -450,14 +505,7 @@ def schedule_booking():
         return jsonify({"ok": False, "message": "Data/ora țintă este în trecut"}), 400
 
     booking_id = db_insert_booking(email, password, target_date_str, target_hour, notify_email)
-
-    scheduler.add_job(
-        run_sniper,
-        trigger=DateTrigger(run_date=job_time, timezone=TZ),
-        args=[booking_id],
-        id=f"sniper_{booking_id}",
-        replace_existing=True,
-    )
+    schedule_sniper(booking_id, job_time)
 
     log.info("Scheduled sniper #%d for %s at %s (job fires at %s)",
              booking_id, target_date_str, target_hour, job_time.isoformat())
@@ -474,5 +522,6 @@ def schedule_booking():
 
 if __name__ == "__main__":
     init_db()
+    restore_pending_jobs()
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port, debug=False)

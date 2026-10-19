@@ -18,7 +18,7 @@ python app.py
 3. Variables → adaugă:
    - `GMAIL_USER` = adresa ta Gmail
    - `GMAIL_PASS` = App Password Gmail (nu parola normală!)
-   - `SECRET_KEY` = un string random lung (ex: openssl rand -hex 32)
+   - `SECRET_KEY` = un string random lung (ex: openssl rand -hex 32). Criptează și parolele Calendis salvate, deci dacă îl schimbi, rezervările deja programate eșuează (cu mesaj clar)
    - `APP_PIN` = PIN-ul de 4 cifre cerut la deschiderea aplicației (obligatoriu; aplicația nu pornește fără el, la fel ca fără `SECRET_KEY`)
 4. Railway detectează automat `railway.json` și rulează build-ul
 5. Settings → Generate Domain → copiezi URL-ul pe telefon

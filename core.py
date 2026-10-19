@@ -36,6 +36,20 @@ def bot_starts_at(slot: datetime) -> datetime:
     return slot_opens_at(slot) - LEAD_TIME
 
 
+def restore_action(slot: datetime, now: datetime) -> str:
+    """What to do with a still-pending booking found after a restart.
+
+    "schedule": the bot's start time is still ahead, so schedule it as usual.
+    "run_now":  we restarted inside the 2-minute lead time, so start immediately.
+    "missed":   the slot already opened while the server was down.
+    """
+    if now < bot_starts_at(slot):
+        return "schedule"
+    if now < slot_opens_at(slot):
+        return "run_now"
+    return "missed"
+
+
 def is_valid_pin(pin: str) -> bool:
     """The login screen has a 4-digit keypad, so only 4-digit PINs can ever be entered."""
     return len(pin) == 4 and pin.isascii() and pin.isdigit()
