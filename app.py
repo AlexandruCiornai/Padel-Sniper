@@ -1,4 +1,6 @@
 import os
+import sys
+import hmac
 import json
 import asyncio
 import sqlite3
@@ -21,14 +23,24 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
+
+def require_env(name: str) -> str:
+    """Read a required secret from the environment; refuse to start without it."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        log.critical("Missing required environment variable %s (see .env.example)", name)
+        sys.exit(1)
+    return value
+
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+app.config["SECRET_KEY"] = require_env("SECRET_KEY")
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 COURT_URL = "https://www.calendis.ro/floresti_cj/parcul-sportiv-floresti/teren-de-paddle-1/s"
 TZ = ZoneInfo("Europe/Bucharest")
-APP_PIN = os.environ.get("APP_PIN", "1234")
+APP_PIN = require_env("APP_PIN")
 
 # ip -> {"count": int, "locked_until": datetime | None}
 _login_attempts: dict = {}
@@ -340,7 +352,7 @@ def app_login():
         return jsonify({"ok": False, "message": f"Blocat. Încearcă după {remaining} min."}), 429
 
     data = request.json or {}
-    if data.get("pin") == APP_PIN:
+    if hmac.compare_digest(str(data.get("pin", "")).encode(), APP_PIN.encode()):
         _login_attempts.pop(ip, None)
         session["authenticated"] = True
         session.permanent = True
