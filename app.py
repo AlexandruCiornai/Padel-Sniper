@@ -9,7 +9,6 @@ import logging
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from threading import Thread
-from zoneinfo import ZoneInfo
 
 from flask import Flask, request, jsonify, render_template, session
 from flask_socketio import SocketIO, emit
@@ -17,6 +16,8 @@ from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
+
+import core
 
 load_dotenv()
 
@@ -39,9 +40,9 @@ CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 COURT_URL = "https://www.calendis.ro/floresti_cj/parcul-sportiv-floresti/teren-de-paddle-1/s"
-TZ = ZoneInfo("Europe/Bucharest")
+TZ = core.TZ
 APP_PIN = require_env("APP_PIN")
-if not (APP_PIN.isdigit() and len(APP_PIN) == 4):
+if not core.is_valid_pin(APP_PIN):
     # The login screen (templates/login.html) has a 4-digit keypad.
     log.critical("APP_PIN must be exactly 4 digits")
     sys.exit(1)
@@ -267,12 +268,9 @@ async def _sniper_async(booking_id: int):
     email = row["email"]
     password = row["password"]
     notify = row["notify_email"]
-    target_date = datetime.strptime(row["target_date"], "%Y-%m-%d").replace(tzinfo=TZ)
     target_hour = row["target_hour"]  # "15:00"
-
-    # fire_time = target_date at target_hour – 14 days (slot opens exactly then)
-    h, m = map(int, target_hour.split(":"))
-    fire_time = target_date.replace(hour=h, minute=m, second=0, microsecond=0) - timedelta(days=14)
+    target_date = core.slot_datetime(row["target_date"], target_hour)
+    fire_time = core.slot_opens_at(target_date)  # the slot becomes bookable exactly then
 
     def push(msg, status=None):
         log.info("[%d] %s", booking_id, msg)
@@ -441,13 +439,11 @@ def schedule_booking():
         return jsonify({"ok": False, "message": "Toate câmpurile sunt obligatorii"}), 400
 
     try:
-        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").replace(tzinfo=TZ)
+        slot = core.slot_datetime(target_date_str, target_hour)
     except ValueError:
-        return jsonify({"ok": False, "message": "Format dată invalid (YYYY-MM-DD)"}), 400
+        return jsonify({"ok": False, "message": "Format dată/oră invalid (YYYY-MM-DD, HH:MM)"}), 400
 
-    h, m = map(int, target_hour.split(":"))
-    fire_time = target_date.replace(hour=h, minute=m, second=0, microsecond=0) - timedelta(days=14)
-    job_time = fire_time - timedelta(minutes=2)  # start sniper 2 min early
+    job_time = core.bot_starts_at(slot)  # start sniper 2 min before the slot opens
 
     now = datetime.now(TZ)
     if job_time < now:

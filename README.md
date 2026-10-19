@@ -1,5 +1,7 @@
 # Padel Sniper 🎾
 
+[![tests](https://github.com/AlexandruCiornai/Padel-Sniper/actions/workflows/tests.yml/badge.svg)](https://github.com/AlexandruCiornai/Padel-Sniper/actions/workflows/tests.yml)
+
 The padel courts in my town (Parcul Sportiv Florești, booked through Calendis) open for booking exactly 14 days ahead, and the evening slots are gone within seconds. So I built a bot that books them the moment they open.
 
 You pick a date and time on your phone. The bot logs in two minutes early, waits on the calendar page, and clicks the slot at exactly `hh:mm:00`. Then it emails you whether it worked.
@@ -34,6 +36,7 @@ You pick a date and time on your phone. The bot logs in two minutes early, waits
 - **Live feedback:** each step is pushed to the open page over Socket.IO and saved to SQLite, so the status survives a page reload.
 - **Access control:** the app sits behind a PIN with per-IP lockout (5 wrong attempts lock that IP for 15 minutes). The app refuses to start without a valid PIN and a secret key.
 - **DST-safe timing:** "14 days before" is computed in calendar days on the Bucharest clock, so a slot on 2 November still fires at 19:00 on 19 October, even though the clocks change in between.
+- **Tested core:** the booking rules (slot parsing, opening time, bot start time, PIN rules) live in [`core.py`](core.py), separate from Flask and Playwright. That way they're unit tested on every push across Python 3.11–3.13, including both DST changes.
 
 ## Stack
 
@@ -56,6 +59,15 @@ python app.py             # http://localhost:5000
 | `PORT` | Defaults to 5000. |
 
 Deploying to Railway: [`railway.json`](railway.json) installs Chromium during the build. The step-by-step guide (in Romanian) is in [SETUP.md](SETUP.md).
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v
+```
+
+The tests are in [`tests/test_core.py`](tests/test_core.py). They pin down the DST case behind a bug I fixed in the phone UI, where the "slot opens at" hint was an hour off whenever the clocks changed inside the 14 days.
 
 ## Limitations and what I'd do next
 
